@@ -62,6 +62,7 @@
 						<td>
 							<xsl:text> </xsl:text>Index name: 
 								<select name="indexName">
+									<option value="ChorIndex">ChorIndex</option>
 									<option value="FgsIndex">FgsIndex</option>
 								</select>
 							<xsl:text> </xsl:text>restXslt: 
