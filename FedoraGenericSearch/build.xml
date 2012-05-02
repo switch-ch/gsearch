@@ -27,7 +27,7 @@
 	<property name="local.SOLR_SERVER" 		   value="http://localhost:8983/solr" />
 	<property name="local.ZEBRA_SERVER" 	   value="http://localhost:9999" />
 	
-    <property name="web.xml.file"              value="web-withAuthN.xml"/> <!-- or web-withoutAuthN.xml -->
+    <property name="web.xml.file"              value="web-withoutAuthN.xml"/> <!-- or web-withAuthN.xml -->
     <property name="javac.debug"               value="on"/>
     <property name="javac.deprecation"         value="on"/>
     <property name="javac.maxwarns"            value="100"/>
