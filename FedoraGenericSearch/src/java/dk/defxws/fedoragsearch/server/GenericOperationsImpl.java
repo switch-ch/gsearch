@@ -1,8 +1,7 @@
-//$Id$
 /*
  * <p><b>License and Copyright: </b>The contents of this file is subject to the
  * same open source license as the Fedora Repository System at www.fedora-commons.org
- * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011 by The Technical University of Denmark.
+ * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 by The Technical University of Denmark.
  * All rights reserved.</p>
  */
 package dk.defxws.fedoragsearch.server;
@@ -34,6 +33,10 @@ import dk.defxws.fedoragsearch.server.errors.FedoraObjectNotFoundException;
 import dk.defxws.fedoragsearch.server.errors.GenericSearchException;
 
 import org.apache.log4j.Logger;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.IndexSearcher;
 
 import org.fcrepo.client.FedoraClient;
 
@@ -72,6 +75,7 @@ public class GenericOperationsImpl implements Operations {
     protected int insertTotal = 0;
     protected int updateTotal = 0;
     protected int deleteTotal = 0;
+    protected int emptyTotal = 0;
     protected int docCount = 0;
     protected int warnCount = 0;
 
@@ -82,6 +86,11 @@ public class GenericOperationsImpl implements Operations {
     protected byte[] ds;
     protected String dsText;
     protected String[] params = null;
+
+//    protected IndexReader ir = null;
+    protected DirectoryReader ir = null;
+    protected IndexSearcher searcher = null;
+    protected IndexWriter iw = null;
 
     private static FedoraClient getFedoraClient(
     		String repositoryName,
@@ -122,12 +131,13 @@ public class GenericOperationsImpl implements Operations {
         final String end = "/services";
         String baseURL = fedoraSoap;
         if (fedoraSoap.endsWith(end)) {
-            return fedoraSoap.substring(0, fedoraSoap.length() - end.length());
+        	baseURL = fedoraSoap.substring(0, fedoraSoap.length() - end.length());
         } else {
             throw new Exception("Unable to determine baseURL from fedoraSoap"
                     + " value (expected it to end with '" + end + "'): "
                     + fedoraSoap);
         }
+        return baseURL;
     }
 
     private static FedoraAPIA getAPIA(
@@ -1078,6 +1088,83 @@ public class GenericOperationsImpl implements Operations {
         String xmlString = "<exception><message>"+exceptionMessage.replaceAll("<", "&lt;")+"</message></exception>";
         Node doc = getDocumentNode(xmlString);
 		return doc;
+    }
+
+    protected boolean indexDocExists(String pid) 
+    throws GenericSearchException {
+    	// two alternatives implemented, both timed
+    	// the one chosen had time=0 ms, the other had time=0 or 1 ms
+    	// the not chosen is left commented out, for future potential use
+    	boolean indexDocExists = true;
+//    	Date startTime = new Date();
+//    	String queryString = "PID:\""+pid+"\"";
+//		QueryParser queryParser = new QueryParser(Version.LUCENE_36, null, new KeywordAnalyzer());
+//    	Query query;
+//		try {
+//			query = queryParser.parse(queryString);
+//		} catch (ParseException e) {
+//            throw new GenericSearchException("indexDocExists parse "+queryString+" exception="+e);
+//		}
+//    	searcher = new IndexSearcher(ir);
+//    	TopDocs hits = null;
+//    	try {
+//    		hits = searcher.search(query, 1);
+//    	} catch (Exception e) {
+//            throw new GenericSearchException("indexDocExists search "+queryString+" exception="+e);
+//    	}
+//    	int hitTotal = hits.totalHits;
+//        String timeusedms = Long.toString((new Date()).getTime() - startTime.getTime());
+//        if (hitTotal==0) indexDocExists = false;
+//        if (logger.isDebugEnabled())
+//            logger.debug("indexDocExists query="+queryString+" hitTotal="+hitTotal+" timeusedms="+timeusedms);
+    	indexDocExists = false;
+//    	startTime = new Date();
+        try {
+//			if (ir.termDocs(new Term("PID", pid)).next()) indexDocExists = true;
+			if (ir.docFreq(new Term("PID", pid))>0) indexDocExists = true;
+		} catch (IOException e) {
+            throw new GenericSearchException("indexDocExists docFreq "+pid+" exception="+e);
+		}
+//        timeusedms = Long.toString((new Date()).getTime() - startTime.getTime());
+        if (logger.isDebugEnabled())
+            logger.debug("indexDocExists pid="+pid+" indexDocExists="+indexDocExists);
+//        logger.debug("indexDocExists termDocs="+pid+" indexDocExists="+indexDocExists+" timeusedms="+timeusedms);
+		return indexDocExists;
+    }
+
+    protected String getPidFromObjectFilename(String filename)  {
+    	String pid = filename;
+    	String filenameStart = "info%3Afedora%2F";
+    	int i = filename.indexOf(filenameStart);
+    	if (i>-1) {
+    		pid = filename.substring(i+filenameStart.length()).replaceAll("%3A", ":");
+    	}
+    	return pid;
+    }
+
+    public static String encode(String in) {
+        String inStr = in;
+        if (inStr == null) {
+            inStr = "";
+        }
+        StringBuffer out = new StringBuffer();
+        for (int i = 0; i < inStr.length(); i++) {
+            char c = inStr.charAt(i);
+            if (c == '&') {
+                out.append("&amp;");
+            } else if (c == '<') {
+                out.append("&lt;");
+            } else if (c == '>') {
+                out.append("&gt;");
+            } else if (c == '\"') {
+                out.append("&quot;");
+            } else if (c == '\'') {
+                out.append("&apos;");
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
     
 }

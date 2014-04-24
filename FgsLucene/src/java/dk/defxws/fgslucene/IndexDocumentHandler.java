@@ -1,8 +1,7 @@
-//$Id$
 /*
  * <p><b>License and Copyright: </b>The contents of this file is subject to the
  * same open source license as the Fedora Repository System at www.fedora-commons.org
- * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011 by The Technical University of Denmark.
+ * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 by The Technical University of Denmark.
  * All rights reserved.</p>
  */
 package dk.defxws.fgslucene;
@@ -10,6 +9,7 @@ package dk.defxws.fgslucene;
 import org.apache.log4j.Logger;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -42,10 +42,11 @@ public class IndexDocumentHandler extends DefaultHandler {
     private StringBuffer elementBuffer;
     private String pid;
     private String fieldName;
-    private Field.Index index;
-    private Field.Store store;
-    private Field.TermVector termVector;
-    private float docboost;
+    private FieldType fType;
+//    http://lucene.apache.org/core/4_0_0/MIGRATE.html :
+//    If you previously used Document.setBoost, 
+//    you must now pre-multiply the document boost into each Field.setBoost
+//    private float docboost;
     private float boost;
     private String dsId;
     private String dsMimetypes;
@@ -99,11 +100,13 @@ public class IndexDocumentHandler extends DefaultHandler {
         methodName = "";
         parameters = "";
         asOfDateTime = "";
-        index = Field.Index.ANALYZED;
-        store = Field.Store.YES;
-        termVector = Field.TermVector.NO;
+        fType = new FieldType();
+        fType.setIndexed(true);
+        fType.setStored(true);
+        fType.setStoreTermVectors(false);
+        fType.setTokenized(true);
         boost = 1;
-        docboost = 1;
+//        docboost = 1;
         if ("IndexDocument".equals(localName) && attrs != null) {
             for (int i = 0; i < attrs.getLength(); i++) {
                 String aName = attrs.getLocalName(i);
@@ -111,14 +114,17 @@ public class IndexDocumentHandler extends DefaultHandler {
                 String val = attrs.getValue(i);
                 if (aName=="PID")
                 	pid = val.trim();
-                if (aName=="boost")
-                    try {
-                        docboost = Float.parseFloat(val);
-                    } catch (NumberFormatException e) {
-                        docboost = Float.parseFloat("3");
-                    }
+//                if (aName=="boost")
+//                    try {
+//                        docboost = Float.parseFloat(val);
+//                    } catch (NumberFormatException e) {
+//                        docboost = Float.parseFloat("3");
+//                    }
             }
-            indexDocument.setBoost(docboost);
+//          http://lucene.apache.org/core/4_0_0/MIGRATE.html :
+//          If you previously used Document.setBoost, 
+//          you must now pre-multiply the document boost into each Field.setBoost
+//            indexDocument.setBoost(docboost);
         }
         if ("IndexField".equals(localName) && attrs != null) {
             for (int i = 0; i < attrs.getLength(); i++) {
@@ -133,21 +139,31 @@ public class IndexDocumentHandler extends DefaultHandler {
                 if (aName=="parameters") parameters = val;
                 if (aName=="asOfDateTime") asOfDateTime = val;
                 if (aName=="index") 
-                    if ("ANALYZED".equals(val) || "TOKENIZED".equals(val)) index = Field.Index.ANALYZED;
-                    else if ("NOT_ANALYZED".equals(val) || "UN_TOKENIZED".equals(val)) index = Field.Index.NOT_ANALYZED;
-                    else if ("NO".equals(val)) index = Field.Index.NO;
-                    else if ("NOT_ANALYZED_NO_NORMS".equals(val) || "NO_NORMS".equals(val)) index = Field.Index.NOT_ANALYZED_NO_NORMS;
-                    else if ("ANALYZED_NO_NORMS".equals(val)) index = Field.Index.ANALYZED_NO_NORMS;
+                    if ("ANALYZED".equals(val) || "TOKENIZED".equals(val)) fType.setTokenized(true);
+                    else if ("NOT_ANALYZED".equals(val) || "UN_TOKENIZED".equals(val)) fType.setTokenized(false);
+                    else if ("YES".equals(val)) fType.setIndexed(true);
+                    else if ("NO".equals(val)) fType.setIndexed(false);
+                    else if ("NO_NORMS".equals(val)) fType.setOmitNorms(true);
+                    else if ("NOT_ANALYZED_NO_NORMS".equals(val)) {
+                    	fType.setTokenized(false);
+                    	fType.setOmitNorms(true);
+                    }
+                    else if ("ANALYZED_NO_NORMS".equals(val)) {
+                    	fType.setTokenized(true);
+                    	fType.setOmitNorms(true);
+                    }
                 if (aName=="store") 
-                    if ("YES".equals(val)) store = Field.Store.YES;
-                    else if ("NO".equals(val)) store = Field.Store.NO;
-//                    else if ("COMPRESS".equals(val)) store = Field.Store.COMPRESS; Deprecated after 2.4
+                    if ("YES".equals(val)) fType.setStored(true);
+                    else if ("NO".equals(val)) fType.setStored(false);
                 if (aName=="termVector") 
-                    if ("NO".equals(val)) termVector = Field.TermVector.NO;
-                    else if ("YES".equals(val)) termVector = Field.TermVector.YES;
-                    else if ("WITH_OFFSETS".equals(val)) termVector = Field.TermVector.WITH_OFFSETS;
-                    else if ("WITH_POSITIONS".equals(val)) termVector = Field.TermVector.WITH_POSITIONS;
-                    else if ("WITH_POSITIONS_OFFSETS".equals(val)) termVector = Field.TermVector.WITH_POSITIONS_OFFSETS;
+                    if ("NO".equals(val)) fType.setStoreTermVectors(false);
+                    else if ("YES".equals(val)) fType.setStoreTermVectors(true);
+                    else if ("WITH_OFFSETS".equals(val)) fType.setStoreTermVectorOffsets(true);
+                    else if ("WITH_POSITIONS".equals(val)) fType.setStoreTermVectorPositions(true);
+                    else if ("WITH_POSITIONS_OFFSETS".equals(val)) {
+                    	fType.setStoreTermVectorOffsets(true);
+                    	fType.setStoreTermVectorPositions(true);
+                    }
                 if (aName=="boost")
                     try {
                         boost = Float.parseFloat(val);
@@ -194,7 +210,7 @@ public class IndexDocumentHandler extends DefaultHandler {
 			if (ebs.length() > 0) {
 				if (logger.isDebugEnabled())
 					logger.debug(fieldName + "=" + ebs);
-				Field f = new Field(fieldName, ebs, store, index, termVector);
+				Field f = new Field(fieldName, ebs, fType);
 				if (boost > Float.MIN_VALUE)
 					f.setBoost(boost);
 				indexDocument.add(f);
