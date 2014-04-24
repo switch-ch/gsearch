@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- FedoraGenericSearch/build.xml -->
 <!-- calls FgsConfig/build.xml -->
-<!-- 
-# For reviewing or testing at your ${local.PROTOCOL}://${local.HOSTPORT}, 
+<!--
+# For reviewing or testing at your ${local.PROTOCOL}://${local.HOSTPORT},
 # including test configurations and installation at tomcat, run
-> ant -Dlocal.PROTOCOL=<protocol> -Dlocal.HOSTPORT=<hostport> -Dlocal.FEDORA_HOME=<location> -Dlocal.SOLR_HOME=<location> -Dlocal.SOLR_SERVER=<url> -Dlocal.ZEBRA_SERVER=<url> buildforlocaltest
+> ant -Dlocal.PROTOCOL=<protocol> -Dlocal.HOSTPORT=<hostport> -Dlocal.FEDORA_HOME=<location> -Dlocal.SOLR_HOME=<location> -Dlocal.SOLR_INDEX_PATH=<location> -Dlocal.SOLR_SERVER=<url> -Dlocal.ZEBRA_SERVER=<url> buildforlocaltest
 
-# For building from source, 
+# For building from source,
 # followed by installation and configuration as in documentation page, run
 > ant buildfromsource
 > ... # move FgsBuild/fromsource/fedoragsearch.war to tomcat webapps and configure
 
-# for release, to be moved to sourceforge, run 
+# for release, to be moved to sourceforge, run
 > ant release
 > ... # move FgsBuild/release/* to sourceforge
 -->
@@ -22,20 +22,23 @@
 
 	<property name="local.PROTOCOL" 		   value="http" />
 	<property name="local.HOSTPORT" 		   value="localhost:8080" />
-	<property name="local.FEDORA_HOME" 		   location="/opt/fedora" />
-	<property name="local.SOLR_HOME" 		   location="/Users/gertschmeltzpedersen/Downloads/apache-solr-3.5.0" />
+	<property name="local.FEDORA_HOME" 		   location="/Users/gertschmeltzpedersen/f371" />
+	<property name="local.FGSCONFIGOBJECTS_HOME" location="${local.FEDORA_HOME}" />
+	<property name="local.SOLR_HOME" 		   location="/Users/gertschmeltzpedersen/Downloads/solr-4.6.1" />
+	<property name="local.SOLR_INDEX_PATH" 	   value="example/solr/collection1" />
 	<property name="local.SOLR_SERVER" 		   value="http://localhost:8983/solr" />
 	<property name="local.ZEBRA_SERVER" 	   value="http://localhost:9999" />
-	
+
     <property name="web.xml.file"              value="web-withoutAuthN.xml"/> <!-- or web-withAuthN.xml -->
     <property name="javac.debug"               value="on"/>
     <property name="javac.deprecation"         value="on"/>
     <property name="javac.maxwarns"            value="100"/>
-    <property name="javac.source"              value="1.5"/>
-    <property name="javac.target"              value="1.5"/>
+    <property name="javac.source"              value="1.6"/>
+    <property name="javac.target"              value="1.6"/>
 
-    <property name="fedoragsearch.version" value="2.4.1"/>
-    <property name="fedora.version" value="3.5"/>
+    <property name="fedoragsearch.version" value="2.7"/>
+    <property name="fedora.version" value="3.7.1"/>
+    <property name="solr.version" value="4.6.1"/>
 
     <property name="source.dir" location="src/java"/>
     <property name="lib.dir" location="lib"/>
@@ -55,7 +58,7 @@
     <path id="compile.classpath">
         <fileset dir="${lib.dir}">
             <include name="**/*.jar"/>
-        </fileset>                    
+        </fileset>
     </path>
 
 	<path id="junit.classpath">
@@ -64,7 +67,7 @@
 		<pathelement path="${compile.dir}"/>
 		<pathelement path="${build.basedir}/classes"/>
 	</path>
-	
+
     <!-- MacroDefs -->
     <macrodef name="md-compile">
         <attribute name="classpathref" default="compile.classpath"/>
@@ -77,14 +80,14 @@
         <!-- default="-Xlint -Xlint:-path -Xmaxwarns ${javac.maxwarns}" -->
         <sequential>
             <mkdir dir="@{destdir}"/>
-            <javac classpathref="@{classpathref}" 
-                   debug="${javac.debug}" 
-                   deprecation="${javac.deprecation}" 
-                   destdir="@{destdir}" 
-                   excludes="@{excludes}" 
+            <javac classpathref="@{classpathref}"
+                   debug="${javac.debug}"
+                   deprecation="${javac.deprecation}"
+                   destdir="@{destdir}"
+                   excludes="@{excludes}"
                    fork="@{fork}"
                    includes="@{includes}"
-                   source="${javac.source}" 
+                   source="${javac.source}"
                    srcdir="@{srcdir}"
                    target="${javac.target}"
             	   encoding="UTF-8">
@@ -92,11 +95,11 @@
             </javac>
         </sequential>
     </macrodef>
-	
+
     <target name="see-top-of-build.xml"
             description="see-top-of-build.xml">
     </target>
-	
+
     <target name="clean"
             description="removes build-generated artifacts">
 		<delete dir="../FgsLucene/bin"/>
@@ -169,7 +172,7 @@
       <zip zipfile="${build.basedir}/release/fedoragsearch-${fedoragsearch.version}.zip"
            basedir="${build.basedir}/release" includes="fedoragsearch-${fedoragsearch.version}/**"/>
     </target>
-  
+
     <target name="srcrelease" depends="">
       <delete dir="${build.basedir}/release/fedoragsearch-${fedoragsearch.version}-src"/>
       <delete file="${build.basedir}/release/fedoragsearch-${fedoragsearch.version}-src.zip" />
@@ -185,7 +188,7 @@
             <exclude name="*/lib/**"/>
         </fileset>
       </copy>
-      <zip zipfile="${build.basedir}/release/fedoragsearch-${fedoragsearch.version}-src.zip" 
+      <zip zipfile="${build.basedir}/release/fedoragsearch-${fedoragsearch.version}-src.zip"
            basedir="${build.basedir}/release" includes="fedoragsearch-${fedoragsearch.version}-src/**"/>
     </target>
 
@@ -198,7 +201,7 @@
     </target>
 
 	<target name="buildfromsource"
-			depends="prep, includeengines"
+			depends="prep, makedrupalmodule, includeengines"
 	        description="build from source">
         <ant dir="../FgsConfig" target="configForWebApp"/>
 		<delete file="${build.dir}/WEB-INF/web.xml" />
@@ -207,7 +210,7 @@
 	</target>
 
 	<target name="buildforlocaltest"
-		    depends="prep, includeengines"
+		    depends="prep, makedrupalmodule, includeengines"
 	        description="build local">
         <ant dir="../FgsConfig" target="configForLocalTest"/>
 		<delete file="${build.dir}/WEB-INF/web.xml" />
@@ -215,117 +218,146 @@
 	    <jar jarfile="${localtest.dir}/${war.name}" basedir="${build.dir}"/>
         <copy file="${localtest.dir}/${war.name}" todir="${local.FEDORA_HOME}/${tomcat.basename}/webapps" preservelastmodified="true"/>
 	</target>
-	
+
     <target name="includeengines" depends="">
         <ant dir="../FgsLucene" inheritAll="false"/>
         <ant dir="../FgsSolr2" inheritAll="false"/>
         <ant dir="../FgsZebra" inheritAll="false"/>
     </target>
-	
+
+    <target name="makedrupalmodule" depends="">
+		<mkdir dir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch/FgsConfigTemplate" />
+		<mkdir dir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch/FgsConfigIndexTemplate" />
+		<mkdir dir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch/FgsConfigReposTemplate" />
+		<copy todir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch/FgsConfigTemplate" preservelastmodified="true">
+			<fileset dir="../FgsConfig/FgsConfigTemplate"/>
+		</copy>
+		<copy todir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch/FgsConfigIndexTemplate" preservelastmodified="true">
+			<fileset dir="../FgsConfig/FgsConfigIndexTemplate"/>
+		</copy>
+		<copy todir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch/FgsConfigReposTemplate" preservelastmodified="true">
+			<fileset dir="../FgsConfig/FgsConfigReposTemplate"/>
+		</copy>
+		<copy file="../FgsConfig/log4j.xml" todir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch" preservelastmodified="true"/>
+		<copy file="../FgsConfig/fgsconfig-basic-for-islandora.properties" todir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch" preservelastmodified="true"/>
+		<copy file="../FgsConfig/fgsconfig-basic.properties" todir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch" preservelastmodified="true"/>
+		<copy file="../FgsConfig/fgsconfig-basic.xml" todir="${build.dir}/FgsConfig/DrupalModuleForIslandora/islandora_gsearch" preservelastmodified="true"/>
+    </target>
+
 	<target name="compile-junit" depends="compile">
 		<md-compile srcdir="${junit.src.dir}"
 					destdir="${junit.build.dir}"
 					classpathref="junit.classpath"/>
         <copy todir="${junit.build.dir}" file="${junit.src.dir}/log4j.xml"/>
 	</target>
-	
+
 	<target name="junit-all" depends="junit-set-all, junit">
 	</target>
-	
+
 	<target name="junit-set-all">
 		<property name="test" value="gsearch.test.AllTests"/>
 	</target>
-	
+
 	<target name="junit-all-lucene-and-solr" depends="junit-set-all-lucene-and-solr, junit">
 	</target>
-	
+
 	<target name="junit-set-all-lucene-and-solr">
 		<property name="test" value="gsearch.test.AllLuceneAndSolrTests"/>
 	</target>
-	
+
 	<target name="junit-lucene" depends="junit-set-lucene, junit">
 	</target>
-	
+
 	<target name="junit-set-lucene">
 		<property name="test" value="gsearch.test.lucene.AllTests"/>
 	</target>
-	
+
 	<target name="junit-solr" depends="junit-set-solr, junit">
 	</target>
-	
+
 	<target name="junit-set-solr">
 		<property name="test" value="gsearch.test.solr.AllTests"/>
 	</target>
-	
+
 	<target name="junit-zebra" depends="junit-set-zebra, junit">
 	</target>
-	
+
 	<target name="junit-set-zebra">
 		<property name="test" value="gsearch.test.zebra.AllTests"/>
 	</target>
-	
+
 	<target name="junit-testsonlucene" depends="junit-set-testsonlucene, junit">
 	</target>
-	
+
 	<target name="junit-set-testsonlucene">
 		<property name="test" value="gsearch.test.testsonlucene.AllTests"/>
 	</target>
-	
+
+	<!-- this test requires in fedora.fcfg :
+    <param name="ENFORCE-MODE" value="enforce-policies"/>
+	 -->
 	<target name="junit-searchresultfiltering" depends="junit-set-searchresultfiltering, junit">
 	</target>
-	
+
 	<target name="junit-set-searchresultfiltering">
 		<property name="test" value="gsearch.test.searchresultfiltering.AllTests"/>
 	</target>
-	
+
 	<target name="junit-fgs23" depends="junit-set-fgs23, junit">
 	</target>
-	
+
 	<target name="junit-set-fgs23">
 		<property name="test" value="gsearch.test.fgs23.AllTests"/>
 	</target>
-	
+
 	<target name="junit-lucene-fgs24_1010" depends="junit-set-lucene-fgs24_1010, junit">
 	</target>
-	
+
 	<target name="junit-set-lucene-fgs24_1010">
 		<property name="test" value="gsearch.test.lucene.fgs24_1010.AllTests"/>
 	</target>
-	
+
 	<target name="junit-solr-fgs24_1010" depends="junit-set-solr-fgs24_1010, junit">
 	</target>
-	
+
 	<target name="junit-set-solr-fgs24_1010">
 		<property name="test" value="gsearch.test.solr.fgs24_1010.AllTests"/>
 	</target>
-	
+
 	<target name="junit-lucene-fgs24_1019" depends="junit-set-lucene-fgs24_1019, junit">
 	</target>
-	
+
 	<target name="junit-set-lucene-fgs24_1019">
 		<property name="test" value="gsearch.test.lucene.fgs24_1019.AllTests"/>
 	</target>
-	
-	<target name="junit-lucene-fgs24_1009" depends="junit-set-lucene-fgs24_1009, junit">
+
+	<target name="junit-fgs242_1076" depends="junit-set-fgs242_1076, junit">
 	</target>
-	
-	<target name="junit-set-lucene-fgs24_1009">
-		<property name="test" value="gsearch.test.lucene.fgs24_1009.AllTests"/>
+
+	<target name="junit-set-fgs242_1076">
+		<property name="test" value="gsearch.test.fgs242_1076.AllTests"/>
 	</target>
-	
+
+	<target name="junit-fgs242_1083" depends="junit-set-fgs242_1083, junit">
+	</target>
+
+	<target name="junit-set-fgs242_1083">
+		<property name="test" value="gsearch.test.fgs242_1083.AllTests"/>
+	</target>
+
 	<target name="junit" depends="compile-junit">
 		<property name="fedoragsearch.protocol" value="${local.PROTOCOL}"/>
 		<property name="fedoragsearch.hostport" value="${local.HOSTPORT}"/>
 		<property name="fedoragsearch.path" value="fedoragsearch/rest"/>
 		<property name="fedoragsearch.user" value="fedoraAdmin"/>
 		<property name="fedoragsearch.pass" value="fedoraAdmin"/>
-		
+
 		<copy todir="${junit.build.dir}" includeEmptyDirs="false" preservelastmodified="true">
 	        <fileset dir="${junit.src.dir}">
                 <exclude name="**/*.java"/>
 	        </fileset>
         </copy>
-		
+
 		<junit printsummary="yes" fork="yes" haltonfailure="no" showoutput="yes">
 			<syspropertyset id="junit.sysproperties">
 				<propertyref name="fedoragsearch.protocol"/>
@@ -339,5 +371,5 @@
 			<test name="${test}"/>
 		</junit>
 	</target>
-    	
+
 </project>

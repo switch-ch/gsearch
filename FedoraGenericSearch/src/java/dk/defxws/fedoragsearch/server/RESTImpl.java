@@ -1,8 +1,7 @@
-//$Id$
 /*
  * <p><b>License and Copyright: </b>The contents of this file is subject to the
  * same open source license as the Fedora Repository System at www.fedora-commons.org
- * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011 by The Technical University of Denmark.
+ * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 by The Technical University of Denmark.
  * All rights reserved.</p>
  */
 package dk.defxws.fedoragsearch.server;
@@ -11,6 +10,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.ServletException;
 
+import org.apache.log4j.Appender;
 import org.apache.log4j.Logger;
 
 import dk.defxws.fedoragsearch.server.errors.GenericSearchException;
@@ -101,6 +102,14 @@ public class RESTImpl extends HttpServlet {
         }
         if (logger.isInfoEnabled())
             logger.info("request="+request.getQueryString()+" remoteUser="+remoteUser+uasb.toString());
+      if (logger.isDebugEnabled()) {
+          logger.debug("logger name="+logger.getName());
+    	  Enumeration <Appender> appenders = logger.getAllAppenders();
+    	  while (appenders.hasMoreElements()) {
+    		  Appender appender = appenders.nextElement(); 
+              logger.debug("logger appender name="+appender.getName());
+    	  }
+      }
         config = Config.getCurrentConfig();
         if (configName!=null && !"configure".equals(operation)) {
         	// mainly for test purposes

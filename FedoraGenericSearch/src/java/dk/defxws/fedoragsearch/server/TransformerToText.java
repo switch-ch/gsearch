@@ -1,8 +1,7 @@
-//$Id$
 /*
  * <p><b>License and Copyright: </b>The contents of this file is subject to the
  * same open source license as the Fedora Repository System at www.fedora-commons.org
- * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011 by The Technical University of Denmark.
+ * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 by The Technical University of Denmark.
  * All rights reserved.</p>
  */
 package dk.defxws.fedoragsearch.server;
@@ -16,7 +15,9 @@ import java.util.Arrays;
 import javax.xml.transform.stream.StreamSource;
 
 import org.apache.log4j.Logger;
-import org.apache.lucene.benchmark.byTask.feeds.demohtml.HTMLParser;
+import org.apache.lucene.benchmark.byTask.feeds.DemoHTMLParser;
+import org.apache.lucene.benchmark.byTask.feeds.DocData;
+import org.apache.lucene.benchmark.byTask.feeds.TrecContentSource;
 //import org.apache.lucene.demo.html.HTMLParser;
 import org.apache.pdfbox.cos.COSDocument;
 import org.apache.pdfbox.pdfparser.PDFParser;
@@ -25,6 +26,8 @@ import org.apache.pdfbox.util.PDFTextStripper;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.sax.WriteOutContentHandler;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 import dk.defxws.fedoragsearch.server.errors.GenericSearchException;
 
@@ -101,7 +104,8 @@ public class TransformerToText {
 			        					    .replace('/', '_')
 			        					    .replace('=', '_')
 			        					    .replace('(', '_')
-			        					    .replace(')', '_');
+			        					    .replace(')', '_')
+			        					    .replace('&', '_');
 			        }
 		        }
 	        }
@@ -178,7 +182,18 @@ public class TransformerToText {
 	        	}
 	        }
 		}
-        return indexFields;
+		StringBuffer docText = new StringBuffer(indexFields);
+//      put space instead of characters not allowed in the indexing stylesheet
+        char c;
+      	for (int i=0; i<docText.length(); i++) {
+      		c = docText.charAt(i);
+        	if (c < 32 && c != 9 && c != 10 && c != 13) {
+                if (logger.isDebugEnabled())
+                	logger.debug("getTextFromTika index="+i+" char="+c+" set to 32");
+                docText.replace(i, i+1, " ");
+        	}
+        }
+        return docText;
     }
     
     public StringBuffer getText(byte[] doc, String mimetype) 
@@ -227,17 +242,26 @@ public class TransformerToText {
     private StringBuffer getTextFromHTML(byte[] doc) 
     throws GenericSearchException {
         StringBuffer docText = new StringBuffer();
-        HTMLParser htmlParser = new HTMLParser(new ByteArrayInputStream(doc));
+        DemoHTMLParser htmlParser = new DemoHTMLParser();
         try {
-            InputStreamReader isr = (InputStreamReader) htmlParser.getReader();
-            int c = isr.read();
-            while (c>-1) {
-                docText.append((char)c);
-                c=isr.read();
-            }
-        } catch (IOException e) {
-            throw new GenericSearchException(e.toString());
-        }
+			DocData docData = htmlParser.parse(new DocData(), null, null, new InputSource(new ByteArrayInputStream(doc)), new TrecContentSource());
+			docText = new StringBuffer(docData.getBody());
+		} catch (IOException e) {
+          throw new GenericSearchException(e.toString());
+		} catch (SAXException e) {
+          throw new GenericSearchException(e.toString());
+		}
+//        HTMLParser htmlParser = new HTMLParser(new ByteArrayInputStream(doc));
+//        try {
+//            InputStreamReader isr = (InputStreamReader) htmlParser.getReader();
+//            int c = isr.read();
+//            while (c>-1) {
+//                docText.append((char)c);
+//                c=isr.read();
+//            }
+//        } catch (IOException e) {
+//            throw new GenericSearchException(e.toString());
+//        }
         return docText;
     }
 

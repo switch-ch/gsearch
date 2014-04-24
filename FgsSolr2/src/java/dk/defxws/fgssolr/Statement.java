@@ -1,20 +1,17 @@
-//$Id$
 /*
  * <p><b>License and Copyright: </b>The contents of this file is subject to the
  * same open source license as the Fedora Repository System at www.fedora-commons.org
- * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011 by The Technical University of Denmark.
+ * Copyright &copy; 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 by The Technical University of Denmark.
  * All rights reserved.</p>
  */
 package dk.defxws.fgssolr;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URLEncoder;
-import java.util.Collection;
 import java.util.ListIterator;
 import java.util.Locale;
 import java.util.StringTokenizer;
@@ -23,12 +20,11 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
 import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.queryParser.MultiFieldQueryParser;
-import org.apache.lucene.queryParser.ParseException;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.FieldComparatorSource;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
@@ -36,20 +32,16 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TopDocsCollector;
-import org.apache.lucene.search.TopFieldCollector;
-import org.apache.lucene.search.TopScoreDocCollector;
+import org.apache.lucene.search.SortField.Type;
 import org.apache.lucene.search.highlight.Highlighter;
 import org.apache.lucene.search.highlight.QueryScorer;
 import org.apache.lucene.search.highlight.Fragmenter;
 import org.apache.lucene.search.highlight.SimpleFragmenter;
 import org.apache.lucene.search.highlight.SimpleHTMLFormatter;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.SimpleFSDirectory;
 import org.apache.lucene.util.Version;
 
+import dk.defxws.fedoragsearch.server.GenericOperationsImpl;
 import dk.defxws.fedoragsearch.server.errors.GenericSearchException;
-import org.fcrepo.server.utilities.StreamUtility;
 
 /**
  * queries the Solr index 
@@ -64,6 +56,7 @@ public class Statement {
     private IndexSearcher searcher;
     
     public ResultSet executeQuery(
+    		IndexSearcher searcher,
             String queryString, 
             int startRecord, 
             int maxResults,
@@ -77,6 +70,21 @@ public class Statement {
             String snippetEnd, 
             String sortFields)
     throws GenericSearchException {
+    	boolean allowLeadingWildcard = true;
+    	boolean lowercaseExpandedTerms = true;
+        if (logger.isDebugEnabled())
+            logger.debug("executeQuery" +
+                    " query="+queryString+
+                    " startRecord="+startRecord+
+                    " maxResults="+maxResults+
+                    " snippetsMax="+snippetsMax+
+                    " fieldMaxLength="+fieldMaxLength+
+                    " indexName="+indexName+
+                    " sortFields="+sortFields+
+                    " defaultQueryFields="+defaultQueryFields+
+                    " allowLeadingWildcard="+allowLeadingWildcard+
+                    " lowercaseExpandedTerms="+lowercaseExpandedTerms);
+        this.searcher = searcher;
     	ResultSet rs = null;
     	StringTokenizer defaultFieldNames = new StringTokenizer(defaultQueryFields);
     	int countFields = defaultFieldNames.countTokens();
@@ -86,46 +94,48 @@ public class Statement {
     	}
     	Query query = null;
     	if (defaultFields.length == 1) {
+    		QueryParser queryParser = new QueryParser(Version.LUCENE_42, defaultFields[0], analyzer);
+    		queryParser.setAllowLeadingWildcard(allowLeadingWildcard);
+    		queryParser.setLowercaseExpandedTerms(lowercaseExpandedTerms);
+            if (logger.isDebugEnabled())
+                logger.debug("executeQuery queryParser" +
+                        " allowLeadingWildcard="+queryParser.getAllowLeadingWildcard() +
+                        " lowercaseExpandedTerms="+queryParser.getLowercaseExpandedTerms());
     		try {
-    			query = (new QueryParser(Version.LUCENE_35, defaultFields[0], analyzer)).parse(queryString);
+    			query = queryParser.parse(queryString);
     		} catch (ParseException e) {
     			throw new GenericSearchException(e.toString());
     		}
     	}
     	else {
+    		MultiFieldQueryParser queryParser = new MultiFieldQueryParser(Version.LUCENE_42, defaultFields, analyzer);
+    		queryParser.setAllowLeadingWildcard(allowLeadingWildcard);
+    		queryParser.setLowercaseExpandedTerms(lowercaseExpandedTerms);
+            if (logger.isDebugEnabled())
+                logger.debug("executeQuery mfqueryParser" +
+                        " allowLeadingWildcard="+queryParser.getAllowLeadingWildcard() +
+                        " lowercaseExpandedTerms="+queryParser.getLowercaseExpandedTerms());
     		try {
-    			query = (new MultiFieldQueryParser(Version.LUCENE_35, defaultFields, analyzer)).parse(queryString);
+    			query = queryParser.parse(queryString);
     		} catch (ParseException e) {
     			throw new GenericSearchException(e.toString());
     		}
     	}
-    	IndexReader ir = null;
+        if (logger.isDebugEnabled())
+        	logger.debug("executeQuery after parse query="+query);
     	try {
-			Directory dir = new SimpleFSDirectory(new File(indexPath));
-    		ir = IndexReader.open(dir, true);
-    		query.rewrite(ir);
-    	} catch (CorruptIndexException e) {
-    		if (ir!=null) {
-        		try {
-    				ir.close();
-    			} catch (IOException e1) {
-    			}
-    		}
-    		throw new GenericSearchException(e.toString());
-    	} catch (IOException e) {
-    		if (ir!=null) {
-        		try {
-    				ir.close();
-    			} catch (IOException e2) {
-    			}
-    		}
+    		query.rewrite(searcher.getIndexReader());
+    	} catch (Exception e) {
     		throw new GenericSearchException(e.toString());
     	}
-    	searcher = new IndexSearcher(ir);
+        if (logger.isDebugEnabled())
+        	logger.debug("executeQuery after rewrite query="+query);
     	int start = Integer.parseInt(Integer.toString(startRecord));
     	TopDocs hits = getHits(query, start+maxResults-1, sortFields);
     	ScoreDoc[] docs = hits.scoreDocs;
     	int end = Math.min(hits.totalHits, start + maxResults - 1);
+        if (logger.isDebugEnabled())
+        	logger.debug("executeQuery hits.totalHits="+hits.totalHits);
     	StringBuffer resultXml = new StringBuffer();
     	resultXml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
     	String queryStringEncoded = null;
@@ -158,7 +168,7 @@ public class Statement {
     		}
     		resultXml.append("<hit no=\""+i+ "\" score=\""+hitsScore+"\">");
     		for (ListIterator li = doc.getFields().listIterator(); li.hasNext(); ) {
-    			Field f = (Field)li.next();
+    			IndexableField f = (IndexableField)li.next();
     			resultXml.append("<field name=\""+f.name()+"\"");
     			String snippets = null;
     			if (snippetsMax > 0) {
@@ -167,14 +177,19 @@ public class Statement {
     				Highlighter highlighter = new Highlighter(formatter, scorer);
     				Fragmenter fragmenter = new SimpleFragmenter(fieldMaxLength);
     				highlighter.setTextFragmenter(fragmenter);
-    				TokenStream tokenStream = analyzer.tokenStream( f.name(), new StringReader(f.stringValue()));
+    				TokenStream tokenStream = null;
+					try {
+						tokenStream = analyzer.tokenStream( f.name(), new StringReader(f.stringValue()));
+					} catch (Exception e) {
+    					errorExit(e.toString());
+					}
     				try {
     					snippets = highlighter.getBestFragments(tokenStream, f.stringValue(), snippetsMax, " ... ");
     				} catch (Exception e) { // all Exceptions to be caught, not just IOException 
     					errorExit(e.toString());
     				}
     				snippets = checkTruncatedWords(snippets, " ... ");
-    				snippets = StreamUtility.enc(snippets);
+    				snippets = GenericOperationsImpl.encode(snippets);
     				snippets = snippets.replaceAll("!!!SNIPPETBEGIN", snippetBegin);
     				snippets = snippets.replaceAll("!!!SNIPPETEND", snippetEnd);
     				if (snippets!=null && !snippets.equals("")) {
@@ -187,34 +202,31 @@ public class Statement {
     					int iamp = snippet.lastIndexOf("&");
     					if (iamp>-1 && iamp>fieldMaxLength-8)
     						snippet = snippet.substring(0, iamp);
-    					resultXml.append(">"+StreamUtility.enc(snippet)+" ... ");
+    					resultXml.append(">"+GenericOperationsImpl.encode(snippet)+" ... ");
     				} else
-    					resultXml.append(">"+StreamUtility.enc(f.stringValue()));
+    					resultXml.append(">"+GenericOperationsImpl.encode(f.stringValue()));
     			resultXml.append("</field>");
     		}
     		resultXml.append("</hit>");
     	}
     	resultXml.append("</solrsearch>");
+        if (logger.isDebugEnabled()) {
+        	int size = 500;
+        	if (resultXml.length()<size)
+        		size = resultXml.length();
+        	String debugString = resultXml.substring(0, size);
+        	if (resultXml.length()>size)
+        		debugString += "...";
+        	logger.debug("executeQuery resultXml="+debugString);
+        }
     	rs = new ResultSet(resultXml);
-    	if (searcher!=null) {
-    		try {
-    			searcher.close();
-    		} catch (IOException e) {
-    		}
-    	}
-		if (ir!=null) {
-    		try {
-				ir.close();
-			} catch (IOException e) {
-			}
-		}
     	return rs;
     }
 
     private void errorExit(String message) throws GenericSearchException {
-    	if (searcher!=null) {
+    	if (searcher.getIndexReader()!=null) {
     		try {
-    			searcher.close();
+    			searcher.getIndexReader().close();
     		} catch (IOException e) {
     		}
     	}
@@ -224,14 +236,17 @@ public class Statement {
 //  sortFields      ::= [sortField[';'sortField]*]
 //  sortField       ::= sortFieldName[','(sortType | locale | comparatorClass)[','reverse]]]]
 //  sortFieldName   ::= #the name of an index field, which is UN_TOKENIZED and contains a single term per document
-//  sortType        ::= 'AUTO' ~ 'SCORE' (default) | 'DOC' | 'INT' | 'SHORT' | 'LONG' | 'FLOAT' | 'DOUBLE' | 'BYTE' | 'STRING' | 'STRING_VAL'
+//  sortType		::= 'BYTE' | 'DOC' | 'DOUBLE' | 'FLOAT' | 'INT' | 'LONG' | 'SCORE' | 'SHORT' | 'STRING' | 'STRING_VAL'
 //  locale          ::= language['-'country['-'variant]]
 //  comparatorClass ::= package-path'.'className['('param['-'param]*')']
-//  reverse         ::= 'ASC' ~ 'false' (~ascending (default)) | 'DESC' ~ 'true' ~ 'reverse' (~descending)
+//  reverse         ::= 'false' (default) | 'true' | 'reverse'
     private TopDocs getHits(Query query, int numHits, String sortFields) throws GenericSearchException {
+        if (logger.isDebugEnabled())
+            logger.debug("getHits" +
+                    " query="+query+
+                    " numHits="+numHits+
+                    " sortFields="+sortFields);
     	TopDocs hits = null;
-    	IndexReader ireader = searcher.getIndexReader();
-    	Collection fieldNames = ireader.getFieldNames(IndexReader.FieldOption.ALL);
     	String sortFieldsString = sortFields;
     	if (sortFields == null) sortFieldsString = "";
     	StringTokenizer st = new StringTokenizer(sortFieldsString, ";");
@@ -239,7 +254,7 @@ public class Statement {
     	int i = 0;
     	while (st.hasMoreTokens()) {
     		SortField sortField = null;
-			int sortType = -1;
+			Type sortType = null;
     		String sortFieldString = st.nextToken().trim();
     		if (sortFieldString.length()==0)
     			errorExit("getHits sortFields='"+sortFields+"' : empty sortField string");
@@ -249,10 +264,8 @@ public class Statement {
     		String sortFieldName = stf.nextToken().trim();
     		if (sortFieldName.length()==0)
     			errorExit("getHits sortFields='"+sortFields+"' : empty sortFieldName string in '" + sortFieldString + "'");
-    		if (!fieldNames.contains(sortFieldName))
-    			errorExit("getHits sortFields='"+sortFields+"' : sortFieldName '" + sortFieldName + "' not found as index field name");
     		if (!stf.hasMoreTokens()) {
-    			sortType = SortField.SCORE;
+    			sortType = SortField.Type.SCORE;
 				sortField = new SortField(sortFieldName, sortType);
     		} else {
     			String sortTypeOrLocaleOrCompString = stf.nextToken().trim();
@@ -319,8 +332,6 @@ public class Statement {
     					if ("true".equalsIgnoreCase(reverseString)) reverse = true;
     					else if ("reverse".equalsIgnoreCase(reverseString)) reverse = true;
     					else if ("false".equalsIgnoreCase(reverseString)) reverse = false;
-    					else if ("DESC".equalsIgnoreCase(reverseString)) reverse = true;
-    					else if ("ASC".equalsIgnoreCase(reverseString)) reverse = false;
     					else
     						errorExit("getHits sortFields='"+sortFields+"' : unknown reverse string '" + reverseString + "' in '" + sortFieldString + "'");
     					sortField = new SortField(sortFieldName, scs, reverse);
@@ -328,17 +339,19 @@ public class Statement {
     			} else {
     				String sortTypeOrLocaleString = sortTypeOrLocaleOrCompString;
     				Locale locale = null;
-    				if ("AUTO".equals(sortTypeOrLocaleString)) sortType = SortField.SCORE;
-    				else if ("SCORE".equals(sortTypeOrLocaleString)) sortType = SortField.SCORE;
-    				else if ("DOC".equals(sortTypeOrLocaleString)) sortType = SortField.DOC;
-    				else if ("INT".equals(sortTypeOrLocaleString)) sortType = SortField.INT;
-    				else if ("SHORT".equals(sortTypeOrLocaleString)) sortType = SortField.SHORT;
-    				else if ("LONG".equals(sortTypeOrLocaleString)) sortType = SortField.LONG;
-    				else if ("FLOAT".equals(sortTypeOrLocaleString)) sortType = SortField.FLOAT;
-    				else if ("DOUBLE".equals(sortTypeOrLocaleString)) sortType = SortField.DOUBLE;
-    				else if ("BYTE".equals(sortTypeOrLocaleString)) sortType = SortField.BYTE;
-    				else if ("STRING".equals(sortTypeOrLocaleString)) sortType = SortField.STRING;
-    				else if ("STRING_VAL".equals(sortTypeOrLocaleString)) sortType = SortField.STRING_VAL;
+    				if ("BYTE".equals(sortTypeOrLocaleString)) sortType = SortField.Type.BYTE;
+    				else if ("DOC".equals(sortTypeOrLocaleString)) sortType = SortField.Type.DOC;
+    				else if ("DOUBLE".equals(sortTypeOrLocaleString)) sortType = SortField.Type.DOUBLE;
+    				else if ("FLOAT".equals(sortTypeOrLocaleString)) sortType = SortField.Type.FLOAT;
+    				else if ("INT".equals(sortTypeOrLocaleString)) sortType = SortField.Type.INT;
+    				else if ("LONG".equals(sortTypeOrLocaleString)) sortType = SortField.Type.LONG;
+    				else if ("SCORE".equals(sortTypeOrLocaleString)) {
+    					sortType = SortField.Type.SCORE;
+//    					searcher.setDefaultFieldSortScoring(true, true); not in 4.0.0
+    				}
+    				else if ("SHORT".equals(sortTypeOrLocaleString)) sortType = SortField.Type.SHORT;
+    				else if ("STRING".equals(sortTypeOrLocaleString)) sortType = SortField.Type.STRING;
+    				else if ("STRING_VAL".equals(sortTypeOrLocaleString)) sortType = SortField.Type.STRING_VAL;
     				else if (((sortTypeOrLocaleString.substring(0, 1)).compareTo("A") >= 0) && ((sortTypeOrLocaleString.substring(0, 1)).compareTo("Z") <= 0)) {
     					errorExit("getHits sortFields='"+sortFields+"' : unknown sortType string '" + sortTypeOrLocaleString + "' in '" + sortFieldString + "'");
     				}
@@ -370,10 +383,10 @@ public class Statement {
     					}
     				}
     				if (!stf.hasMoreTokens()) {
-    					if (sortType >= 0)
+    					if (sortType != null)
     						sortField = new SortField(sortFieldName, sortType);
-    					else
-    						sortField = new SortField(sortFieldName, locale);
+//    					else
+//    						sortField = new SortField(sortFieldName, locale);
     				} else {
     					String reverseString = stf.nextToken().trim();
     					if (reverseString.length()==0)
@@ -382,39 +395,32 @@ public class Statement {
     					if ("true".equalsIgnoreCase(reverseString)) reverse = true;
     					else if ("reverse".equalsIgnoreCase(reverseString)) reverse = true;
     					else if ("false".equalsIgnoreCase(reverseString)) reverse = false;
-    					else if ("DESC".equalsIgnoreCase(reverseString)) reverse = true;
-    					else if ("ASC".equalsIgnoreCase(reverseString)) reverse = false;
     					else
     						throw new GenericSearchException("getHits sortFields='"+sortFields+"' : unknown reverse string '" + reverseString + "' in '" + sortFieldString + "'");
-    					if (sortType == SortField.SCORE) reverse = !reverse;
-    					if (sortType >= 0)
+    					if (sortType == SortField.Type.SCORE) reverse = !reverse;
+    					if (sortType != null)
     						sortField = new SortField(sortFieldName, sortType, reverse);
-    					else
-    						sortField = new SortField(sortFieldName, locale, reverse);
+//    					else
+//    						sortField = new SortField(sortFieldName, locale, reverse);
     				}
     			}
     		}
     		sortFieldArray[i++] = sortField;
     	}
-    	TopDocsCollector collector = null;
     	if (sortFieldArray.length == 0) {
-    		collector = TopScoreDocCollector.create(numHits, true);
+        	try {
+        		hits = searcher.search(query, numHits);
+        	} catch (Exception e) {
+        		errorExit("getHits search : "+e.toString());
+        	}
     	} else {
     		try {
     	    	Sort sort = new Sort(sortFieldArray);
-    	    	collector = TopFieldCollector.create( sort, numHits, true, true, true, true);
+        		hits = searcher.search(query, numHits, sort);
     		} catch (Exception e) {
-    			errorExit("getHits TopFieldCollector sortFields='"+sortFields+"' : "+e.toString());
+    			errorExit("getHits search sortFields='"+sortFields+"' : "+e.toString());
     		} 
     	}
-    	try {
-    		searcher.search(query, collector);
-    	} catch (IOException e) {
-    		errorExit("getHits search sortFields='"+sortFields+"' : "+e.toString());
-    	} catch (RuntimeException e) {
-    		errorExit("getHits search RuntimeException sortFields='"+sortFields+"' : "+e.toString());
-    	}
-    	hits = collector.topDocs();
     	return hits;
     }
 
