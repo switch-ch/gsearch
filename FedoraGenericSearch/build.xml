@@ -22,7 +22,7 @@
 
 	<property name="local.PROTOCOL" 		   value="http" />
 	<property name="local.HOSTPORT" 		   value="localhost:8080" />
-	<property name="local.FEDORA_HOME" 		   location="/Users/gertschmeltzpedersen/f371" />
+	<property name="local.FEDORA_HOME" 		   location="/opt/fedora" />
 	<property name="local.FGSCONFIGOBJECTS_HOME" location="${local.FEDORA_HOME}" />
 	<property name="local.SOLR_HOME" 		   location="/Users/gertschmeltzpedersen/Downloads/solr-4.6.1" />
 	<property name="local.SOLR_INDEX_PATH" 	   value="example/solr/collection1" />
